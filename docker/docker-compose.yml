@@ -1,0 +1,9 @@
+version: '3'
+
+services:
+    web:
+        image: markus2210/tp-div_318_grupo_municipalidad-de-la-utn:latest
+        ports:
+          - "80:81"
+        volumes:
+          - ./web/file:/usr/share/nginx/html/file/ 
