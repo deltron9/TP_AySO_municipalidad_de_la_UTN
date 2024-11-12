@@ -1,0 +1,92 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+Vagrant.configure("2") do |config|
+  config.vagrant.plugins = "vagrant-disksize"
+
+  #-----------------Definir la primera máquina virtual (Ubuntu) como 'testing'
+  config.vm.define "testing" do |vmTesting|
+    vmTesting.vm.box = "ubuntu/jammy64"
+    vmTesting.vm.hostname = "testing"
+    vmTesting.vm.network "private_network", ip: "192.168.56.4"
+
+    # Redirección de puerto SSH
+    vmTesting.vm.network "forwarded_port", guest: 22, host: 2222
+
+    #-------------------Comparto la carpeta del host donde estoy parado contra la vm
+    vmTesting.vm.synced_folder 'compartido_testing/', '/home/vagrant/compartido',
+    owner: 'vagrant', group: 'vagrant'
+
+    #-----------Inserción de clave SSH
+    vmTesting.ssh.insert_key = true
+
+    #---------Discos adicionales
+    vmTesting.vm.disk :disk, size: "5GB", name: "#{vmTesting.vm.hostname}_disco1"
+    vmTesting.vm.disk :disk, size: "3GB", name: "#{vmTesting.vm.hostname}_disco2"
+    vmTesting.vm.disk :disk, size: "2GB", name: "#{vmTesting.vm.hostname}_disco3"
+    vmTesting.vm.disk :disk, size: "1GB", name: "#{vmTesting.vm.hostname}_disco4_extra"
+
+    #----------------Configuración del proveedor VirtualBox
+    vmTesting.vm.provider "virtualbox" do |vb|
+      vb.memory = "1024"
+      vb.name = "testing"
+      vb.cpus = 1
+      vb.linked_clone = true
+    end
+
+    #---------------------Provisionamiento para ejecutar los scripts en Ubuntu
+    vmTesting.vm.provision "shell", path: "instalar_paquetes_ubuntu.sh"
+    vmTesting.vm.provision "shell", path: "configurar_host.sh"
+    vmTesting.vm.provision "shell", path: "configuracion_sudo.sh"
+    vmTesting.vm.provision "shell", path: "LVM.sh"
+
+    #------ Provision para copiar la clave pública de 'testing' a 'produccion'
+    vmTesting.vm.provision "shell", inline: <<-SHELL
+      ssh-keyscan -H produccion >> ~/.ssh/known_hosts
+      cat ~/.ssh/id_ed25519.pub | ssh -o StrictHostKeyChecking=no vagrant@produccion "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"
+    SHELL
+  end
+
+  #------------Definir la segunda máquina virtual (Fedora) como 'produccion'
+  config.vm.define "produccion" do |vmProduccion|
+    vmProduccion.vm.box = "generic/fedora36"
+    vmProduccion.vm.hostname = "produccion"
+    vmProduccion.vm.network "private_network", ip: "192.168.56.5"
+
+    # Redirección de puerto SSH
+    vmProduccion.vm.network "forwarded_port", guest: 22, host: 2223
+
+    #--------------Comparto la carpeta del host donde estoy parado contra la vm
+    vmProduccion.vm.synced_folder 'compartido_produccion/', '/home/vagrant/compartido'
+
+    #-----------------------------Inserción de clave SSH
+    vmProduccion.ssh.insert_key = true
+
+    #------------Discos adicionales
+    vmProduccion.vm.disk :disk, size: "5GB", name: "#{vmProduccion.vm.hostname}_disco1"
+    vmProduccion.vm.disk :disk, size: "3GB", name: "#{vmProduccion.vm.hostname}_disco2"
+    vmProduccion.vm.disk :disk, size: "2GB", name: "#{vmProduccion.vm.hostname}_disco3"
+    vmProduccion.vm.disk :disk, size: "1GB", name: "#{vmProduccion.vm.hostname}_disco4_extra"
+
+    #---------------------------------------Configuración del proveedor VirtualBox
+    vmProduccion.vm.provider "virtualbox" do |vb|
+      vb.memory = "1024"
+      vb.name = "produccion"
+      vb.cpus = 1
+      vb.linked_clone = true
+    end
+
+    #----------------------------------Provisionamiento para ejecutar los scripts en Fedora
+    vmProduccion.vm.provision "shell", path: "instalar_paquetes_fedora.sh"
+    vmProduccion.vm.provision "shell", path: "configurar_host.sh"
+    vmProduccion.vm.provision "shell", path: "configuracion_sudo.sh"
+    vmProduccion.vm.provision "shell", path: "LVM.sh"
+
+    #------ Provision para copiar la clave pública de 'produccion' a 'testing'
+    vmProduccion.vm.provision "shell", inline: <<-SHELL
+      ssh-keyscan -H testing >> ~/.ssh/known_hosts
+      cat ~/.ssh/id_ed25519.pub | ssh -o StrictHostKeyChecking=no vagrant@testing "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"
+    SHELL
+  end
+end
+
